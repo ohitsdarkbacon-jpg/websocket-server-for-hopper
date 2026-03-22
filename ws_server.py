@@ -55,10 +55,16 @@ def fetch_servers():
 
 # ===== WEBSOCKET HANDLERS =====
 def new_client(client, server):
-    print(f"[WS] New client connected: {client['id']}")
+    if client is None:
+        print("[WS] New client connected (None)")
+    else:
+        print(f"[WS] New client connected: {client['id']}")
 
 def client_left(client, server):
-    print(f"[WS] Client disconnected: {client['id']}")
+    if client is None:
+        print("[WS] Client disconnected (None)")
+    else:
+        print(f"[WS] Client disconnected: {client['id']}")
 
 def send_server_to_client(client, server):
     global server_queue, used_servers
