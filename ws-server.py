@@ -7,7 +7,7 @@ import time
 import os
 
 # ===== CONFIG =====
-PLACE_ID = 123456789  # 🔴 Put your Roblox game ID here
+PLACE_ID = 109983668079237  # 🔴 Put your Roblox game ID here
 
 # Render dynamic port
 PORT = int(os.environ.get("PORT", 10000))  # Render assigns a port automatically
