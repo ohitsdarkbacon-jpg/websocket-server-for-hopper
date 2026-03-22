@@ -1,3 +1,4 @@
+import os
 import asyncio
 import websockets
 import requests
@@ -5,6 +6,9 @@ import json
 import time
 
 PLACE_ID = 123456789  # 🔴 Put your Roblox game ID here
+
+# ✅ Dynamic port for Render / fallback for local testing
+PORT = int(os.environ.get("PORT", 10000))
 
 server_queue = []
 used_servers = {}  # server_id : timestamp when used
@@ -74,8 +78,8 @@ async def handler(websocket):
 async def main():
     asyncio.create_task(fetch_servers())
 
-    async with websockets.serve(handler, "0.0.0.0", 10000):
-        print("WebSocket server running on port 10000...")
+    async with websockets.serve(handler, "0.0.0.0", PORT):
+        print(f"WebSocket server running on port {PORT}...")
         await asyncio.Future()  # run forever
 
 # ✅ Fix for Render / event loop issues
