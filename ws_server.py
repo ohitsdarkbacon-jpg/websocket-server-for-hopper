@@ -34,6 +34,8 @@ def fetch_servers():
                         if s["playing"] < s["maxPlayers"] and sid not in used_servers:
                             server_queue.append(sid)
                             used_servers[sid] = time.time()
+                            # 🔹 Log each server added
+                            print(f"[Queue Added] Server ID: {sid}, Players: {s['playing']}/{s['maxPlayers']}")
                 cursor = res.get("nextPageCursor")
                 if cursor:
                     url = f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public?limit=100&cursor={cursor}"
@@ -56,24 +58,26 @@ def fetch_servers():
 # ===== WEBSOCKET HANDLERS =====
 def new_client(client, server):
     if client is None:
-        print("[WS] New client connected (None)")
-    else:
-        print(f"[WS] New client connected: {client['id']}")
+        return
+    print(f"[WS] New client connected: {client['id']}")
 
 def client_left(client, server):
     if client is None:
-        print("[WS] Client disconnected (None)")
-    else:
-        print(f"[WS] Client disconnected: {client['id']}")
+        return
+    print(f"[WS] Client disconnected: {client['id']}")
 
 def send_server_to_client(client, server):
     global server_queue, used_servers
+    if client is None:
+        return
     with lock:
         if server_queue:
             sid = server_queue.pop(0)
             used_servers[sid] = time.time()
+            print(f"[Sent] Server ID {sid} sent to client {client['id']}")
         else:
             sid = None
+            print(f"[Sent] No server available for client {client['id']}")
     server.send_message(client, json.dumps({"server": sid}))
 
 # ===== SERVER LOOP =====
