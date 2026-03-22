@@ -8,8 +8,12 @@ import os
 
 # ===== CONFIG =====
 PLACE_ID = 123456789  # 🔴 Put your Roblox game ID here
-PORT = int(os.environ.get("PORT", 10000))  # dynamic for Render, fallback local
-REUSE_INTERVAL = 3600  # seconds → 1 hour
+
+# Render dynamic port
+PORT = int(os.environ.get("PORT", 10000))  # Render assigns a port automatically
+
+# 1-hour reuse interval
+REUSE_INTERVAL = 3600  # seconds
 
 # Server queue and used servers
 server_queue = []
@@ -47,7 +51,7 @@ def fetch_servers():
         except Exception as e:
             print("[Fetch Error]", e)
 
-        time.sleep(5)  # wait 5s before next fetch
+        time.sleep(5)  # wait 5 seconds before next fetch
 
 # ===== WEBSOCKET HANDLERS =====
 def new_client(client, server):
