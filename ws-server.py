@@ -8,19 +8,13 @@ import os
 
 # ===== CONFIG =====
 PLACE_ID = 123456789  # 🔴 Put your Roblox game ID here
+PORT = int(os.environ.get("PORT", 10000))  # dynamic for Render, fallback local
+REUSE_INTERVAL = 3600  # seconds → 1 hour
 
-# Render dynamic port or default for local
-PORT = int(os.environ.get("PORT", 10000))
-
-# 1-hour reuse interval for servers
-REUSE_INTERVAL = 3600
-
-# Queue and used servers
+# Server queue and used servers
 server_queue = []
 used_servers = {}  # server_id : timestamp
-
 lock = threading.Lock()
-
 
 # ===== FETCH SERVERS =====
 def fetch_servers():
@@ -33,7 +27,6 @@ def fetch_servers():
                 with lock:
                     for s in res.get("data", []):
                         sid = s["id"]
-                        # Only add if not used in the last 1 hour
                         if s["playing"] < s["maxPlayers"] and sid not in used_servers:
                             server_queue.append(sid)
                             used_servers[sid] = time.time()
@@ -43,7 +36,7 @@ def fetch_servers():
                 else:
                     break
 
-            # Cleanup used_servers older than 1 hour
+            # Cleanup used servers older than 1hr
             now = time.time()
             with lock:
                 for sid, ts in list(used_servers.items()):
@@ -54,17 +47,14 @@ def fetch_servers():
         except Exception as e:
             print("[Fetch Error]", e)
 
-        time.sleep(5)  # wait 5 seconds before next fetch
-
+        time.sleep(5)  # wait 5s before next fetch
 
 # ===== WEBSOCKET HANDLERS =====
 def new_client(client, server):
     print(f"[WS] New client connected: {client['id']}")
 
-
 def client_left(client, server):
     print(f"[WS] Client disconnected: {client['id']}")
-
 
 def send_server_to_client(client, server):
     global server_queue, used_servers
@@ -76,14 +66,12 @@ def send_server_to_client(client, server):
             sid = None
     server.send_message(client, json.dumps({"server": sid}))
 
-
 # ===== SERVER LOOP =====
 def tick(server):
     while True:
         for c in server.clients:
             send_server_to_client(c, server)
-        time.sleep(1)  # push every 1 second
-
+        time.sleep(1)  # push servers every 1 second
 
 # ===== RUN SERVER =====
 def run_server():
@@ -91,14 +79,11 @@ def run_server():
     ws_server.set_fn_new_client(new_client)
     ws_server.set_fn_client_left(client_left)
 
-    # Start server tick in background thread
     threading.Thread(target=tick, args=(ws_server,), daemon=True).start()
     ws_server.run_forever()
 
-
 # ===== START EVERYTHING =====
 if __name__ == "__main__":
-    # Start server fetching thread
     threading.Thread(target=fetch_servers, daemon=True).start()
     print(f"[Server] Roblox-compatible WS server running on port {PORT}")
     run_server()
