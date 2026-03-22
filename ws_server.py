@@ -1,93 +1,104 @@
-import os
-import asyncio
-import websockets
+# ws_server.py
+from websocket_server import WebsocketServer
 import requests
 import json
+import threading
 import time
+import os
 
+# ===== CONFIG =====
 PLACE_ID = 123456789  # 🔴 Put your Roblox game ID here
 
-# ✅ Dynamic port for Render / fallback for local testing
+# Render dynamic port or default for local
 PORT = int(os.environ.get("PORT", 10000))
 
+# 1-hour reuse interval for servers
+REUSE_INTERVAL = 3600
+
+# Queue and used servers
 server_queue = []
-used_servers = {}  # server_id : timestamp when used
-lock = asyncio.Lock()  # ensures atomic access
+used_servers = {}  # server_id : timestamp
 
-REUSE_INTERVAL = 3600  # seconds → 1 hour
+lock = threading.Lock()
 
-# 🔁 Fetch servers continuously
-async def fetch_servers():
+
+# ===== FETCH SERVERS =====
+def fetch_servers():
     global server_queue, used_servers
-
     while True:
         try:
             url = f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public?limit=100"
-
             while url:
                 res = requests.get(url).json()
-
-                async with lock:
+                with lock:
                     for s in res.get("data", []):
-                        if s["playing"] < s["maxPlayers"]:
-                            sid = s["id"]
-                            # only add if not currently used
-                            if sid not in used_servers:
-                                server_queue.append(sid)
-                                used_servers[sid] = time.time()
-
+                        sid = s["id"]
+                        # Only add if not used in the last 1 hour
+                        if s["playing"] < s["maxPlayers"] and sid not in used_servers:
+                            server_queue.append(sid)
+                            used_servers[sid] = time.time()
                 cursor = res.get("nextPageCursor")
                 if cursor:
                     url = f"https://games.roblox.com/v1/games/{PLACE_ID}/servers/Public?limit=100&cursor={cursor}"
                 else:
                     break
 
-            # 🔄 Clean up used_servers older than 1hr
-            async with lock:
-                now = time.time()
+            # Cleanup used_servers older than 1 hour
+            now = time.time()
+            with lock:
                 for sid, ts in list(used_servers.items()):
                     if now - ts >= REUSE_INTERVAL:
                         del used_servers[sid]
 
-            print(f"[Queue size]: {len(server_queue)} | Used servers: {len(used_servers)}")
-
+            print(f"[Queue] {len(server_queue)} servers | [Used] {len(used_servers)}")
         except Exception as e:
-            print("Fetch error:", e)
+            print("[Fetch Error]", e)
 
-        await asyncio.sleep(5)
+        time.sleep(5)  # wait 5 seconds before next fetch
 
-# 🔌 Handle client connections
-async def handler(websocket):
-    print("Client connected")
-    try:
-        while True:
-            async with lock:
-                if len(server_queue) > 0:
-                    server = server_queue.pop(0)
-                    used_servers[server] = time.time()
-                else:
-                    server = None
 
-            await websocket.send(json.dumps({"server": server}))
-            await asyncio.sleep(1)
+# ===== WEBSOCKET HANDLERS =====
+def new_client(client, server):
+    print(f"[WS] New client connected: {client['id']}")
 
-    except:
-        print("Client disconnected")
 
-# 🚀 Main entry
-async def main():
-    asyncio.create_task(fetch_servers())
+def client_left(client, server):
+    print(f"[WS] Client disconnected: {client['id']}")
 
-    async with websockets.serve(handler, "0.0.0.0", PORT):
-        print(f"WebSocket server running on port {PORT}...")
-        await asyncio.Future()  # run forever
 
-# ✅ Fix for Render / event loop issues
+def send_server_to_client(client, server):
+    global server_queue, used_servers
+    with lock:
+        if server_queue:
+            sid = server_queue.pop(0)
+            used_servers[sid] = time.time()
+        else:
+            sid = None
+    server.send_message(client, json.dumps({"server": sid}))
+
+
+# ===== SERVER LOOP =====
+def tick(server):
+    while True:
+        for c in server.clients:
+            send_server_to_client(c, server)
+        time.sleep(1)  # push every 1 second
+
+
+# ===== RUN SERVER =====
+def run_server():
+    ws_server = WebsocketServer(port=PORT, host='0.0.0.0')
+    ws_server.set_fn_new_client(new_client)
+    ws_server.set_fn_client_left(client_left)
+
+    # Start server tick in background thread
+    threading.Thread(target=tick, args=(ws_server,), daemon=True).start()
+    ws_server.run_forever()
+
+
+# ===== START EVERYTHING =====
 if __name__ == "__main__":
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    loop.run_until_complete(main())
+    # Start server fetching thread
+    threading.Thread(target=fetch_servers, daemon=True).start()
+    print(f"[Server] Roblox-compatible WS server running on port {PORT}")
+    run_server()
