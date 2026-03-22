@@ -1,2 +1,2 @@
-websocket-server
 requests
+websocket-server
